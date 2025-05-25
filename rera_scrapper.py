@@ -4,32 +4,47 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import ElementClickInterceptedException, TimeoutException
 from webdriver_manager.chrome import ChromeDriverManager
 
-# Setup headless Chrome
 options = Options()
-options.add_argument("--headless")
+options.add_argument("--headless=new")  # Use new headless mode if your Chrome supports it
 driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
 
-# Open the main project list page
 url = "https://rera.odisha.gov.in/projects/project-list"
 driver.get(url)
-time.sleep(5)  # wait for JS to load
+wait = WebDriverWait(driver, 15)
 
-# Find first 6 'View Details' links
-links = driver.find_elements(By.LINK_TEXT, "View Details")[:6]
+time.sleep(5)  # Let the page load
 
 project_data = []
 
-for i in range(len(links)):
-    # Since page reloads after back(), re-find links each iteration
-    links = driver.find_elements(By.LINK_TEXT, "View Details")[:6]
+for i in range(6):
+    # Re-find the links every iteration because DOM reloads after back()
+    links = wait.until(EC.presence_of_all_elements_located((By.LINK_TEXT, "View Details")))
+    link = links[i]
+
+    # Scroll into view
+    driver.execute_script("arguments[0].scrollIntoView(true);", link)
     
-    print(f"Opening project {i+1} details page...")
-    links[i].click()
-    time.sleep(4)  # wait for detail page to load
-    
-    soup = BeautifulSoup(driver.page_source, 'html.parser')
+    # Wait until clickable, then try clicking with retries
+    for attempt in range(3):
+        try:
+            wait.until(EC.element_to_be_clickable((By.LINK_TEXT, "View Details")))
+            link.click()
+            break
+        except ElementClickInterceptedException:
+            print(f"Click intercepted on attempt {attempt + 1}, retrying...")
+            time.sleep(1)
+    else:
+        print("Failed to click after retries, skipping this project.")
+        continue
+
+    time.sleep(4)  # Wait for detail page to load
+
+    soup = BeautifulSoup(driver.page_source, "html.parser")
 
     def get_field(label):
         tag = soup.find('td', string=label)
@@ -47,12 +62,13 @@ for i in range(len(links)):
     project_data.append(project)
 
     driver.back()
-    time.sleep(3)  # wait to return to list page
+    time.sleep(3)  # Wait for the list page to reload
 
-# Print the scraped data
+print("\nScraped Projects:\n")
 for idx, proj in enumerate(project_data, 1):
-    print(f"\nProject {idx}:")
-    for key, val in proj.items():
-        print(f"{key}: {val}")
+    print(f"Project {idx}:")
+    for k, v in proj.items():
+        print(f"  {k}: {v}")
+    print()
 
 driver.quit()
