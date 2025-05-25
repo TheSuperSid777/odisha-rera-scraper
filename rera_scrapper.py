@@ -11,30 +11,24 @@ options = Options()
 options.add_argument("--headless")
 driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
 
-base_url = "https://rera.odisha.gov.in"
+# Open the main project list page
+url = "https://rera.odisha.gov.in/projects/project-list"
+driver.get(url)
+time.sleep(5)  # wait for JS to load
 
-# Open main project list page
-driver.get(f"{base_url}/projects/project-list")
-time.sleep(5)  # wait for page to load JS content
-
-# Find the first 6 'View Details' links
+# Find first 6 'View Details' links
 links = driver.find_elements(By.LINK_TEXT, "View Details")[:6]
-project_links = []
-
-for link in links:
-    href = link.get_attribute("href")
-    # Fix relative URLs by prepending base URL
-    if href.startswith("/"):
-        href = base_url + href
-    project_links.append(href)
 
 project_data = []
 
-for url in project_links:
-    print("Opening URL:", url)
-    driver.get(url)
-    time.sleep(3)  # wait for page to load
-
+for i in range(len(links)):
+    # Since page reloads after back(), re-find links each iteration
+    links = driver.find_elements(By.LINK_TEXT, "View Details")[:6]
+    
+    print(f"Opening project {i+1} details page...")
+    links[i].click()
+    time.sleep(4)  # wait for detail page to load
+    
     soup = BeautifulSoup(driver.page_source, 'html.parser')
 
     def get_field(label):
@@ -52,9 +46,12 @@ for url in project_links:
     }
     project_data.append(project)
 
-# Print all projects
-for i, proj in enumerate(project_data, 1):
-    print(f"\nProject {i}:")
+    driver.back()
+    time.sleep(3)  # wait to return to list page
+
+# Print the scraped data
+for idx, proj in enumerate(project_data, 1):
+    print(f"\nProject {idx}:")
     for key, val in proj.items():
         print(f"{key}: {val}")
 
